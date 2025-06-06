@@ -1,0 +1,14 @@
+services:
+  livecodes_app:
+    image: melashri/livecodes:latest
+    container_name: livecodes_app
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    networks:
+      - livecodes_net
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost/ || exit 1"]
+      interval: 1m30s
+      timeout: 10s
+      retries: 3
