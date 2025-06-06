@@ -12,10 +12,8 @@ jobs:
   check-and-build:
     runs-on: ubuntu-latest
     permissions:
-      contents: write   
-      id-token: read
-      packages: write   # if we use GitHub Packages; otherwise can be omitted
-      actions: read
+      contents: write
+      packages: write
 
     steps:
       - name: Checkout this repo
@@ -28,8 +26,8 @@ jobs:
         uses: actions/github-script@v7
         with:
           script: |
-            const owner = 'live-codes';      
-            const repo  = 'livecodes';          
+            const owner = 'live-codes';
+            const repo  = 'livecodes';
             const { data: release } = await github.rest.repos.getLatestRelease({
               owner,
               repo
@@ -57,7 +55,7 @@ jobs:
         if: steps.check_tag.outputs.already == 'true'
         run: |
           echo "Release ${TAG} already built → skipping."
-          
+
       - name: Log in to Docker Hub
         if: steps.check_tag.outputs.already == 'false'
         uses: docker/login-action@v3
