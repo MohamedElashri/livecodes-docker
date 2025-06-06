@@ -1,0 +1,88 @@
+# .github/workflows/ci.yml
+
+name: daily-build-and-push
+
+on:
+  schedule:
+    # Every day at 02:00 UTC
+    - cron: '0 2 * * *'
+  workflow_dispatch: {}
+
+jobs:
+  check-and-build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write   
+      id-token: read
+      packages: write   # if we use GitHub Packages; otherwise can be omitted
+      actions: read
+
+    steps:
+      - name: Checkout this repo
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0      # fetch all history & tags
+
+      - name: Determine latest upstream release
+        id: get_latest
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const owner = 'live-codes';      
+            const repo  = 'livecodes';          
+            const { data: release } = await github.rest.repos.getLatestRelease({
+              owner,
+              repo
+            });
+            return release.tag_name;
+          result-encoding: string
+
+      - name: Set TAG variable
+        run: echo "TAG=${{ steps.get_latest.outputs.result }}" >> $GITHUB_ENV
+
+      - name: Fetch existing tags in this repo
+        run: |
+          git fetch --tags
+
+      - name: Check if this repo already has a tag matching upstream
+        id: check_tag
+        run: |
+          if git rev-parse "refs/tags/${TAG}" >/dev/null 2>&1; then
+            echo "::set-output name=already::true"
+          else
+            echo "::set-output name=already::false"
+          fi
+
+      - name: Skip build if no new release
+        if: steps.check_tag.outputs.already == 'true'
+        run: |
+          echo "Release ${TAG} already built → skipping."
+          
+      - name: Log in to Docker Hub
+        if: steps.check_tag.outputs.already == 'false'
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Build and push Docker image
+        if: steps.check_tag.outputs.already == 'false'
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./Dockerfile
+          push: true
+          tags: |
+            melashri/livecodes:latest
+            melashri/livecodes:${{ env.TAG }}
+          build-args: |
+            REPO_REF=${{ env.TAG }}
+            UPSTREAM_REPO=https://github.com/live-codes/livecodes.git
+
+      - name: Create Git tag for this release
+        if: steps.check_tag.outputs.already == 'false'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git tag "${TAG}"
+          git push origin "refs/tags/${TAG}"
